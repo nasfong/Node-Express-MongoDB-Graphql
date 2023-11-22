@@ -1,0 +1,101 @@
+import { IPermission } from '../../models/Permission';
+import { Role } from '../../models/Role';
+import { IUser, User } from '../../models/User'
+
+
+export const userResolver = {
+  Query: {
+    async getUser(_: unknown, { id }: { id: number }) {
+      const user = await User
+        .findById(id)
+        .populate({
+          path: 'role',
+          select: '_id'
+        })
+        .exec()
+        .then((data) => ({
+          id: data?._id,
+          username: data?.username,
+          password: data?.password,
+          email: data?.email,
+          role: data?.role?.map((role) => role._id),
+          createdAt: data?.createdAt
+        }))
+      return user
+    },
+    async getAllUsers() {
+      const users = await User.find()
+        // .select('role -_id')
+        .populate({
+          path: 'role',
+          select: 'name permission -_id',
+          populate: {
+            path: 'permission'
+          },
+        })
+        .exec()
+        .then((data) => data.map(user => {
+          // const permission = user.role?.map(({ permission }: any) => permission.map(({ name }: any) => name)[0])
+
+          return ({
+            id: user._id,
+            username: user.username,
+            password: user.password,
+            email: user.email,
+            role: user.role?.map(({ name }: any) => name),
+            createdAt: user.createdAt,
+            // permission: permission?.filter((item: any, index: any) => permission.indexOf(item) === index)
+          })
+        }
+        ))
+      return users
+    },
+  },
+  Mutation: {
+    async createUser(_: unknown, { input }: { input: IUser }) {
+      const create = await new User<IUser>({
+        ...input,
+        createdAt: new Date().toISOString()
+      }).save()
+
+      await Role.updateMany(
+        { _id: { $in: input.role } },
+        { $addToSet: { role: [create.id] } },
+        { multi: true }
+      )
+
+      return create.populate('role')
+    },
+    async updateUser(_: unknown, { id, input }: { id: number, input: IUser }) {
+      const update = await User
+        .findOneAndUpdate({ _id: id }, { ...input }, { new: true })
+        .populate('role')
+        .exec()
+        .then((user) => {
+          // const permission = user?.role?.map(({ permission }: any) => permission.map(({ name }: any) => name)[0])
+
+          return ({
+            id: user?._id,
+            username: user?.username,
+            password: user?.password,
+            email: user?.email,
+            role: user?.role?.map(({ name }: any) => name),
+            createdAt: user?.createdAt,
+          })
+        }
+        )
+
+      await Role.updateMany(
+        { _id: { $in: input.role } },
+        { $addToSet: { role: [id] } },
+        { multi: true }
+      )
+
+      return update
+    },
+    async deleteUser(_: any, { id }: { id: number }) {
+      const wasDelete = (await User.deleteOne({ _id: id })).deletedCount
+      return wasDelete // 1 if something was deleted, 0if nothing deleted
+    },
+  }
+}

@@ -1,0 +1,14 @@
+scalar Upload
+
+type File {
+  id: ID!
+  image: String
+}
+
+type Query {
+  uploads: [File]
+}
+type Mutation {
+  singleUpload(file: Upload!): File!
+  deleteUpload(id: ID!): File!
+}
